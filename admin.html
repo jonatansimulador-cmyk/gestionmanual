@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Gestión de Cartera</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      background-color: #f1f2f6;
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+    }
+    
+    /* Overlay y Login */
+    #login-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center;
+      z-index: 9999;
+    }
+    .login-box {
+      background: white; padding: 40px; border-radius: 12px; text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .login-box input {
+      padding: 12px; margin-bottom: 20px; width: 80%; border-radius: 8px;
+      border: 2px solid #dfe6e9; outline: none; text-align: center; font-family: 'Poppins', sans-serif;
+    }
+    .login-box button {
+      background: #6c5ce7; color: white; padding: 12px 20px; border: none; border-radius: 8px;
+      cursor: pointer; font-weight: 600; width: 88%; font-family: 'Poppins', sans-serif;
+    }
+    
+    /* Contenedor Admin */
+    .contenedor {
+      max-width: 1200px; margin: 0 auto; background: #ffffff; border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08); padding: 30px; display: none;
+    }
+    h1 { color: #d63031; text-align: center; margin-bottom: 20px; font-weight: 600; }
+    
+    .controles { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    .input-box {
+      padding: 12px; border-radius: 8px; border: 2px solid #dfe6e9;
+      font-family: 'Poppins', sans-serif; outline: none; width: 100%; max-width: 300px; cursor: pointer;
+    }
+    .btn-file {
+      background: #d63031; color: white; padding: 12px 20px; border-radius: 8px;
+      cursor: pointer; font-weight: 600; transition: background 0.3s;
+    }
+    .btn-file:hover { background: #b02728; }
+    input[type="file"] { display: none; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th { background: #2d3436; color: #ffffff; padding: 14px; text-align: left; }
+    td { padding: 14px; border-bottom: 1px solid #f1f2f6; }
+    .badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .bg-contacto { background: #e0f6f0; color: #00b894; }
+    .bg-wsp { background: #e1f0fa; color: #0984e3; }
+    .bg-nocontacto { background: #fbeae9; color: #d63031; }
+    .bg-tercero { background: #fcece8; color: #e17055; }
+    
+    .btn-volver { position: absolute; top: 20px; left: 20px; text-decoration: none; color: #6c5ce7; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <!-- Modal Login -->
+  <div id="login-overlay">
+    <div class="login-box">
+      <h2>Acceso Administrador</h2>
+      <input type="password" id="pass-input" placeholder="Contraseña..." onkeydown="if(event.key==='Enter') verificarPass()">
+      <br>
+      <button onclick="verificarPass()">Ingresar</button>
+    </div>
+  </div>
+
+  <a href="index.html" class="btn-volver">← Volver a Asesores</a>
+
+  <div class="contenedor" id="panel-admin">
+    <h1>Panel de Control - Monitoreo Global</h1>
+    
+    <div class="controles">
+      <select id="filtro-asesor" class="input-box" onchange="filtrarTabla()">
+        <option value="TODOS">👥 Ver Todos los Asesores</option>
+      </select>
+      
+      <label class="btn-file">
+        📤 Cargar y Sobrescribir Base (Excel)
+        <input type="file" id="file-upload" accept=".xlsx, .xls, .xlsm">
+      </label>
+    </div>
+    
+    <div id="status-carga" style="display:none; text-align:center; color:#d63031; font-weight:600; margin-bottom:15px;"></div>
+
+    <table id="tabla-datos">
+      <thead>
+        <tr>
+          <th>Asesor</th>
+          <th>DNI Cliente</th>
+          <th>Contacto Exitoso</th>
+          <th>Estado Actual</th>
+        </tr>
+      </thead>
+      <tbody id="cuerpo-tabla"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzSQ0fVpmvhAOoXHFagOYQOr8mmJda2rhWHjvzumDbatJ1UHavifEF2dY4Oa2dU_2gG/exec";
+
+    // Validar Contraseña
+    function verificarPass() {
+      const pass = document.getElementById('pass-input').value;
+      if (pass === 'admin321') {
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('panel-admin').style.display = 'block';
+        cargarDatosAdmin();
+      } else {
+        alert("Contraseña incorrecta");
+      }
+    }
+
+    // Leer datos
+    function cargarDatosAdmin() {
+      document.getElementById('cuerpo-tabla').innerHTML = '<tr><td colspan="4" style="text-align:center;">Cargando registros...</td></tr>';
+      fetch(WEB_APP_URL)
+        .then(response => response.json())
+        .then(datos => mostrarDatos(datos))
+        .catch(error => console.error(error));
+    }
+
+    function mostrarDatos(datos) {
+      const cuerpo = document.getElementById('cuerpo-tabla');
+      const selectAsesor = document.getElementById('filtro-asesor');
+      cuerpo.innerHTML = '';
+      
+      const asesoresUnicos = [...new Set(datos.map(item => item.asesor.trim()).filter(a => a !== ''))].sort();
+      selectAsesor.innerHTML = '<option value="TODOS">👥 Ver Todos los Asesores</option>';
+      asesoresUnicos.forEach(asesor => {
+        const option = document.createElement('option');
+        option.value = asesor;
+        option.textContent = asesor;
+        selectAsesor.appendChild(option);
+      });
+      
+      datos.forEach(cliente => {
+        const tr = document.createElement('tr');
+        
+        let claseBadge = "";
+        if(cliente.estado === "SE CONTACTO") claseBadge = "bg-contacto";
+        else if(cliente.estado === "SE MANDO MENSAJE DE WSP Y SE AGENDO") claseBadge = "bg-wsp";
+        else if(cliente.estado === "NO HAY CONTACTO") claseBadge = "bg-nocontacto";
+        else if(cliente.estado === "TERCERO EQUIVOCADO") claseBadge = "bg-tercero";
+
+        tr.innerHTML = `
+          <td class="col-asesor" style="font-weight:600;">${cliente.asesor}</td>
+          <td>${cliente.dni}</td>
+          <td>${cliente.telefonoLlamado ? '📞 ' + cliente.telefonoLlamado : '<span style="color:#b2bec3">Sin gestión</span>'}</td>
+          <td>${cliente.estado ? `<span class="badge ${claseBadge}">${cliente.estado}</span>` : '-'}</td>
+        `;
+        cuerpo.appendChild(tr);
+      });
+    }
+
+    function filtrarTabla() {
+      const filtro = document.getElementById('filtro-asesor').value;
+      const filas = document.querySelectorAll('#cuerpo-tabla tr');
+      filas.forEach(fila => {
+        const asesor = fila.querySelector('.col-asesor').textContent.trim();
+        fila.style.display = (filtro === "TODOS" || asesor === filtro) ? '' : 'none';
+      });
+    }
+
+    // Subir Excel (Solo Admin)
+    document.getElementById('file-upload').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const status = document.getElementById('status-carga');
+      status.style.display = 'block';
+      status.innerText = 'PROCESANDO EXCEL Y SOBRESCRIBIENDO BASE... NO CERRAR.';
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+
+        const procesados = [];
+        for(let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if(!row || row.length === 0) continue;
+          procesados.push({
+            asesor: row[0] || '',
+            dni: row[1] || '',
+            t1: row[2] || '',
+            t2: row[3] || '',
+            t3: row[4] || '',
+            t4: row[5] || '',
+            t5: row[6] || ''
+          });
+        }
+
+        fetch(WEB_APP_URL, {
+          method: 'POST',
+          body: JSON.stringify(procesados),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        })
+        .then(res => res.json())
+        .then(() => {
+          alert('Base actualizada correctamente en Google Sheets.');
+          status.style.display = 'none';
+          cargarDatosAdmin(); // Recarga la tabla
+        })
+        .catch(err => {
+          alert('Error crítico al subir la base.');
+          console.error(err);
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>
